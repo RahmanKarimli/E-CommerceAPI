@@ -1,0 +1,65 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Stripe Payment</title>
+    <script src="https://js.stripe.com/v3/"></script>
+    <style>
+        body { font-family: Arial, sans-serif; text-align: center; padding: 50px; }
+        #card-element { border: 1px solid #ccc; padding: 10px; border-radius: 5px; }
+        button { background: blue; color: white; padding: 10px; border: none; margin-top: 10px; cursor: pointer; }
+        #message { margin-top: 20px; font-weight: bold; }
+    </style>
+</head>
+<body>
+
+<h2>Pay with Stripe</h2>
+
+<form id="payment-form">
+    <label>Enter Card Details:</label>
+    <div id="card-element"></div>
+    <button type="submit">Pay Now</button>
+</form>
+
+<div id="message"></div>
+
+<script>
+    // Initialize Stripe with your publishable key
+    const stripe = Stripe("pk_test_51QrLcZFTCZWykylGpIi2hPHdz9u2ghyWWzRuteR61XdcrN4cy9MSV1OSw773qbh8UCHMopOdFxmMrLA8xU0jvaFY00LhsTGF9L");
+    const elements = stripe.elements();
+    const card = elements.create("card");
+    card.mount("#card-element");
+
+    // Handle form submission
+    document.getElementById("payment-form").addEventListener("submit", async (e) => {
+        e.preventDefault();
+        const { paymentMethod, error } = await stripe.createPaymentMethod({
+            type: "card",
+            card: card
+        });
+
+        if (error) {
+            document.getElementById("message").innerText = "Error: " + error.message;
+        } else {
+            fetch("http://localhost:8080/order/charge", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                    currency: "usd",
+                    paymentMethodId: paymentMethod.id
+                })
+            })
+                .then(response => response.json())
+                .then(data => {
+                    document.getElementById("message").innerText = data.message || "Payment Successful!";
+                })
+                .catch(err => {
+                    document.getElementById("message").innerText = "Payment failed.";
+                });
+        }
+    });
+</script>
+
+</body>
+</html>
