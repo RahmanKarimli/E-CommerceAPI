@@ -1,8 +1,10 @@
 package com.example.ecommerceapi.Services;
 
+import com.example.ecommerceapi.Exceptions.AuthenticationFailedException;
 import com.example.ecommerceapi.Models.AppUser;
 import com.example.ecommerceapi.Repositories.AppUserRepo;
 import lombok.AllArgsConstructor;
+import org.springframework.security.core.Authentication;
 import org.springframework.security.core.userdetails.User;
 import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.security.core.userdetails.UserDetailsService;
@@ -27,5 +29,15 @@ public class AppUserService implements UserDetailsService {
                     .build();
         }
         throw new UsernameNotFoundException("User not found");
+    }
+
+    public AppUser loadAppUserById(long id) {
+        return appUserRepository.findById(id).orElseThrow(() -> new UsernameNotFoundException("User not found"));
+    }
+
+    public AppUser getCurrentUser(Authentication authentication) {
+        UserDetails user = (UserDetails) authentication.getPrincipal();
+
+        return appUserRepository.findByUsername(user.getUsername()).orElseThrow(() -> new AuthenticationFailedException("User not found"));
     }
 }

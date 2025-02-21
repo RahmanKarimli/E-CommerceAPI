@@ -3,39 +3,56 @@ package com.example.ecommerceapi.Services;
 
 import com.example.ecommerceapi.Models.AppUser;
 import com.example.ecommerceapi.Models.Product;
-import com.example.ecommerceapi.Repositories.AppUserRepo;
+import com.example.ecommerceapi.Models.ProductPageDTO;
 import com.example.ecommerceapi.Repositories.ProductRepo;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.apache.coyote.BadRequestException;
+import org.springframework.cache.annotation.CacheEvict;
+import org.springframework.cache.annotation.CachePut;
+import org.springframework.cache.annotation.Cacheable;
+import org.springframework.cache.annotation.Caching;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
-import java.util.Date;
-import java.util.List;
 import java.util.Optional;
 
 @Service
 @RequiredArgsConstructor
+@Slf4j
 public class ProductService {
     private final ProductRepo productRepo;
-    private final AppUserRepo appUserRepo;
 
-    public List<Product> findAll() {
-        return productRepo.findAll();
+    @Cacheable("productPages")
+    public ProductPageDTO findAll(Pageable pageable) {
+        log.warn("Fetching data from DB...");
+        Page<Product> page = productRepo.findAll(pageable);
+
+        return new ProductPageDTO(
+                page.getContent(),
+                page.getNumber(),
+                page.getSize(),
+                page.getTotalElements(),
+                page.getTotalPages()
+        );
     }
 
+    @Transactional
+    @CachePut(value = "productData", key = "#result.id")
+    @CacheEvict(value = "productPages", allEntries = true)
     public Product saveProduct(Product product, AppUser user) {
-        product.setCreatedAt(new Date());
-        Product newProduct = productRepo.save(product);
-
-        user.getProducts().add(newProduct);
-        appUserRepo.save(user);
-
-        return newProduct;
+        product.setUser(user);
+        return productRepo.save(product);
     }
 
-    public Product changeProduct(Optional<Product> product, Product newProduct, AppUser user) throws BadRequestException {
+    @Transactional
+    @CachePut(value = "productData", key = "#result.id")
+    @CacheEvict(value = "productPages", allEntries = true)
+    public Product changeProduct(Optional<Product> product, Product newProduct) throws BadRequestException {
         if (product.isEmpty()) {
             throw new BadRequestException("Product not found.");
         }
@@ -45,22 +62,19 @@ public class ProductService {
         existingProduct.setDescription(newProduct.getDescription());
         existingProduct.setPrice(newProduct.getPrice());
         existingProduct.setInventoryCount(newProduct.getInventoryCount());
-        Product updatedProduct = productRepo.save(existingProduct);
 
-        user.getProducts().removeIf(p -> p.getId() == updatedProduct.getId());
-        user.getProducts().add(updatedProduct);
-        appUserRepo.save(user);
-
-        return updatedProduct;
+        return productRepo.save(existingProduct);
     }
 
-    public ResponseEntity<HttpStatus> deleteProduct(long id, AppUser user) {
-        Product deletedProduct = productRepo.findById(id).get();
-        productRepo.deleteById(id);
-
-        user.getProducts().removeIf(p -> p.getId() == deletedProduct.getId());
-        appUserRepo.save(user);
-
+    @Transactional
+    @Caching(
+            evict = {
+                    @CacheEvict(value = "productData", key = "#productId"),
+                    @CacheEvict(value = "productPages", allEntries = true)
+            }
+    )
+    public ResponseEntity<HttpStatus> deleteProduct(long productId) {
+        productRepo.deleteById(productId);
         return new ResponseEntity<>(HttpStatus.NO_CONTENT);
     }
 }

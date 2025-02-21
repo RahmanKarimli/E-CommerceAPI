@@ -25,7 +25,8 @@ public class SecurityConfig {
                 .csrf(AbstractHttpConfigurer::disable)
                 .exceptionHandling(exception -> exception.authenticationEntryPoint(authEntryPointJwt))
                 .authorizeHttpRequests(auth -> auth
-                        .requestMatchers("/api/v1/auth/**", "/products/").permitAll()
+                        .requestMatchers("/admin/products").hasRole("ADMIN")
+                        .requestMatchers("/auth/**", "/products", "/css/**", "/js/**", "/*.html", "/favicon.ico", "/checkout", "/api/webhook**").permitAll()
                         .anyRequest().authenticated()
                 )
                 .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))

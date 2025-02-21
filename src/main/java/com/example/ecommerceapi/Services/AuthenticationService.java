@@ -8,7 +8,6 @@ import lombok.AllArgsConstructor;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 
-import java.util.Date;
 
 @Service
 @AllArgsConstructor
@@ -34,7 +33,6 @@ public class AuthenticationService {
                 .address(registerRequest.getAddress())
                 .password(passwordEncoder.encode(registerRequest.getPassword()))
                 .role(Role.CLIENT)
-                .createdAt(new Date())
                 .build();
 
         appUserRepository.save(newUser);

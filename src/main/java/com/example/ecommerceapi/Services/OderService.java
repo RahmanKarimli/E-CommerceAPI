@@ -1,14 +1,16 @@
 package com.example.ecommerceapi.Services;
 
 
-import com.example.ecommerceapi.Models.AppUser;
-import com.example.ecommerceapi.Models.Order;
-import com.example.ecommerceapi.Models.Status;
+import com.example.ecommerceapi.Models.*;
 import com.example.ecommerceapi.Repositories.OrderRepo;
+import com.example.ecommerceapi.Repositories.ProductRepo;
+import com.stripe.Stripe;
 import com.stripe.exception.StripeException;
 import com.stripe.model.PaymentIntent;
 import com.stripe.param.PaymentIntentCreateParams;
+import jakarta.annotation.PostConstruct;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.apache.coyote.BadRequestException;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
@@ -16,82 +18,68 @@ import org.springframework.transaction.annotation.Transactional;
 
 @Service
 @RequiredArgsConstructor
+@Slf4j
 public class OderService {
+    private final OrderRepo orderRepo;
+    private final ProductRepo productRepo;
+    private final CartService cartService;
+    private final AppUserService appUserService;
     @Value("${stripe.api.key}")
-//    api ket is not used why?
     private String stripeApiKey;
 
-    private final OrderRepo orderRepo;
-    private final CartService cartService;
+    @PostConstruct
+    public void init() {
+        Stripe.apiKey = stripeApiKey;
+    }
 
     @Transactional
     public PaymentIntent createPaymentIntent(AppUser user) throws StripeException {
         double cartTotal = cartService.getTotalPrice(user);
 
-        Order order = Order.builder()
-                .user(user)
-                .status(Status.PENDING)
-                .totalAmount(cartTotal)
-                .build();
-        orderRepo.save(order);
 
         PaymentIntentCreateParams params = PaymentIntentCreateParams.builder()
                 .setAmount((long) (cartTotal * 100))
                 .setCurrency("usd")
-//                I didn't understand anything from this part
                 .setAutomaticPaymentMethods(
                         PaymentIntentCreateParams.AutomaticPaymentMethods.builder()
                                 .setEnabled(true)
                                 .build()
                 )
-//                What is metadata
-                .putMetadata("orderId", String.valueOf(order.getId()))
                 .build();
-//      Doesn't this have to return paymentintent id? I mean how we will know
-//      paymentintentid so we can pass to confirmPayment function
-        return PaymentIntent.create(params);
-    }
+        PaymentIntent paymentIntent = PaymentIntent.create(params);
 
+        Order order = Order.builder()
+                .user(user)
+                .status(Status.PENDING)
+                .totalAmount(cartTotal)
+                .stripePaymentId(paymentIntent.getId())
+                .build();
+
+        orderRepo.save(order);
+
+        return paymentIntent;
+    }
 
     @Transactional
-    public Order confirmPayment(String paymentIntentId, AppUser user) throws StripeException, BadRequestException {
-//        How does this get intentid from a class but now an object?
-        PaymentIntent paymentIntent = PaymentIntent.retrieve(paymentIntentId);
-        String orderId = paymentIntent.getMetadata().get("orderId");
+    public void handleSuccessfulPayment(String id) throws BadRequestException {
+        Order order = orderRepo.findByStripePaymentId(id).orElseThrow(() -> new BadRequestException("Payment id not found"));
 
-        Order order = orderRepo.findById(Long.parseLong(orderId))
-                .orElseThrow(() -> new BadRequestException("Order not Found"));
-
-        if ("succeeded".equals(paymentIntent.getStatus())) {
-            order.setStatus(Status.PAID);
-            order.setStripePaymentId(paymentIntentId);
-            orderRepo.save(order);
-
-            // Clear cart after successful payment
-            cartService.clearCart(user);
-        } else {
-            order.setStatus(Status.FAILED);
-            orderRepo.save(order);
+        AppUser user = appUserService.loadAppUserById(order.getUser().getId());
+        for (Cart cart : cartService.findAllByUser(user)) {
+            Product product = productRepo.findById(cart.getProductId()).orElseThrow(() -> new BadRequestException("Product not found"));
+            product.setInventoryCount(product.getInventoryCount() - cart.getQuantity());
+            productRepo.save(product);
         }
 
-        return order;
+        order.setStatus(Status.PAID);
+        orderRepo.save(order);
+
+        cartService.clearCart(user);
+    }
+
+    public void handleFailedPayment(String id) throws BadRequestException {
+        Order order = orderRepo.findByStripePaymentId(id).orElseThrow(() -> new BadRequestException("Payment id not found"));
+        order.setStatus(Status.CANCELLED);
+        orderRepo.save(order);
     }
 }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-

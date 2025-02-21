@@ -1,7 +1,8 @@
 package com.example.ecommerceapi.Models;
 
 public enum Status {
-    PENDING,
+    CANCELLED,
     PAID,
-    FAILED
+    PENDING,
+    SHIPPED
 }

@@ -1,0 +1,25 @@
+<!DOCTYPE html>
+<html lang="en" xmlns:th="http://www.thymeleaf.org">
+<head>
+    <title>Checkout</title>
+    <script src="https://js.stripe.com/v3/"></script>
+    <link rel="stylesheet" th:href="@{/css/styles.css}">
+</head>
+<body>
+<form id="payment-form" class="payment-form">
+    <h2>Checkout</h2>
+    <div id="payment-element">
+        <!-- Stripe.js will insert the payment element here -->
+    </div>
+    <button id="payment-button" type="submit">Pay Now</button>
+    <div id="payment-message"></div>
+</form>
+
+<script th:inline="javascript">
+    /* <![CDATA[ */
+    const AUTH_TOKEN = /*[[${authToken}]]*/ 'default_token';
+    /* ]]> */
+</script>
+<script th:src="@{/js/checkout.js}"></script>
+</body>
+</html>

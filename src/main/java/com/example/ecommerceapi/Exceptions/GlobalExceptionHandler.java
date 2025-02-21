@@ -43,11 +43,11 @@ public class GlobalExceptionHandler {
     }
 
     @ExceptionHandler(InsufficientInventoryException.class)
-    public ResponseEntity<ErrorResponse> handleInventoryExceptions(MethodArgumentNotValidException ex) {
+    public ResponseEntity<ErrorResponse> handleInventoryExceptions(InsufficientInventoryException ex) {
         ErrorResponse errorResponse = new ErrorResponse(
                 HttpStatus.CONFLICT.value(),
                 "Conflict",
-                Objects.requireNonNull(ex.getBindingResult().getFieldError()).getDefaultMessage()
+                ex.getMessage()
         );
         return new ResponseEntity<>(errorResponse, HttpStatus.CONFLICT);
     }

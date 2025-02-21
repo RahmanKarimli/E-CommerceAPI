@@ -1,6 +1,7 @@
 package com.example.ecommerceapi.Models;
 
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import jakarta.persistence.*;
 import lombok.AllArgsConstructor;
 import lombok.Data;
@@ -25,5 +26,11 @@ public class Product {
 
     @ManyToOne
     @JoinColumn(name = "user_id", nullable = false)
+    @JsonIgnore
     private AppUser user;
+
+    @PrePersist
+    protected void onCreate() {
+        createdAt = new Date();
+    }
 }

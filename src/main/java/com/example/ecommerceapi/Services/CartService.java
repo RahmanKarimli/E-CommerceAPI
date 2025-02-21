@@ -4,24 +4,22 @@ package com.example.ecommerceapi.Services;
 import com.example.ecommerceapi.Exceptions.InsufficientInventoryException;
 import com.example.ecommerceapi.Models.AppUser;
 import com.example.ecommerceapi.Models.Cart;
-import com.example.ecommerceapi.Repositories.AppUserRepo;
 import com.example.ecommerceapi.Repositories.CartRepo;
 import com.example.ecommerceapi.Repositories.ProductRepo;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.apache.coyote.BadRequestException;
-import org.springframework.http.HttpStatus;
-import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
-import java.util.Date;
 import java.util.List;
 import java.util.Optional;
 
 @Service
 @RequiredArgsConstructor
+@Slf4j
 public class CartService {
     private final CartRepo cartRepo;
-    private final AppUserRepo appUserRepo;
     private final ProductRepo productRepo;
 
     public List<Cart> findAllByUser(AppUser user) {
@@ -32,14 +30,14 @@ public class CartService {
         double totalPrice = 0;
 
         for (Cart cart : currentUser.getCarts()) {
-            totalPrice += productRepo.findById(cart.getProductId()).get().getPrice();
+            totalPrice += productRepo.findById(cart.getProductId()).get().getPrice() * cart.getQuantity();
         }
 
-        return totalPrice;
+        return Math.round(totalPrice * 100.0) / 100.0;
     }
 
     public Cart addProductToCart(Cart newCart, AppUser user) {
-        Optional<Cart> existingCart = cartRepo.findCartByIdAndUser(newCart.getProductId(), user);
+        Optional<Cart> existingCart = cartRepo.findByProductIdAndUser(newCart.getProductId(), user);
         int productInventoryCount = productRepo.findById(newCart.getProductId()).get().getInventoryCount();
 
         if (existingCart.isPresent()) {
@@ -50,26 +48,19 @@ public class CartService {
             }
 
             cart.setQuantity(cart.getQuantity() + newCart.getQuantity());
-            Cart updatedCart = cartRepo.save(cart);
 
-            user.getCarts().removeIf(c -> c.getId() == updatedCart.getId());
-            user.getCarts().add(updatedCart);
-            appUserRepo.save(user);
-
-            return updatedCart;
+            return cartRepo.save(cart);
         }
         if (newCart.getQuantity() > productInventoryCount) {
             throw new InsufficientInventoryException("Insufficient inventory for the requested quantity.");
         }
 
-        newCart.setCreatedAt(new Date());
-        Cart savedCart = cartRepo.save(newCart);
+        newCart.setUser(user);
 
-        user.getCarts().add(savedCart);
-        return savedCart;
+        return cartRepo.save(newCart);
     }
 
-    public Cart changeCart(Optional<Cart> cart, Cart newCart, AppUser user) throws BadRequestException {
+    public Cart changeCart(Optional<Cart> cart, Cart newCart) throws BadRequestException {
         if (cart.isEmpty()) {
             throw new BadRequestException("Cart not found.");
         }
@@ -83,22 +74,18 @@ public class CartService {
 
         existingCart.setProductId(newCart.getProductId());
         existingCart.setQuantity(newCart.getQuantity());
-        Cart updatedCart = cartRepo.save(existingCart);
 
-        user.getCarts().removeIf(c -> c.getId() == updatedCart.getId());
-        user.getCarts().add(updatedCart);
-        appUserRepo.save(user);
-
-        return updatedCart;
+        return cartRepo.save(existingCart);
     }
 
-    public ResponseEntity<HttpStatus> deleteCart(long cartId, AppUser user) {
-        Cart deletedCart = cartRepo.findById(cartId).get();
+    public Cart deleteCart(long cartId) throws BadRequestException {
+        Cart cart = cartRepo.findById(cartId).orElseThrow(() -> new BadRequestException("Cart not found"));
         cartRepo.deleteById(cartId);
+        return cart;
+    }
 
-        user.getCarts().removeIf(c -> c.getId() == deletedCart.getId());
-        appUserRepo.save(user);
-
-        return new ResponseEntity<>(HttpStatus.NO_CONTENT);
+    @Transactional
+    public void clearCart(AppUser user) {
+        cartRepo.deleteCartsByUser(user);
     }
 }
